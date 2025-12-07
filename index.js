@@ -23,22 +23,30 @@ const client = new MongoClient(uri, {
 
 const eTuitionsDB = client.db("eTuitionsBD");
 const usersCollection = eTuitionsDB.collection("users");
+const tutorsCollection = eTuitionsDB.collection("tutors");
 
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
-
+    // users related api
     app.post("/users", async (req, res) => {
       const newUser = req.body;
-     const query ={email:newUser.email}
+      const query = { email: newUser.email };
 
-     const userExist = await usersCollection.findOne(query);
-     if(userExist){
-        return res.send({message:'user already exists!'})
-     }
+      const userExist = await usersCollection.findOne(query);
+      if (userExist) {
+        return res.send({ message: "user already exists!" });
+      }
 
       const result = await usersCollection.insertOne(newUser);
+      res.send(result);
+    });
+
+    // tutors related api
+    app.get("/tutors", async (req, res) => {
+      const cursor =  tutorsCollection.find({});
+      const result = await cursor.toArray();
       res.send(result);
     });
   } finally {
