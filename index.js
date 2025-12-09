@@ -52,7 +52,19 @@ async function run() {
 
     // tuitions related api
     app.get("/tuitions", async (req, res) => {
-      const result = await tuitionsCollection.find({}).toArray();
+      const result = await tuitionsCollection
+        .find({})
+        .sort({ postedAt: -1 })
+        .toArray();
+      res.send(result);
+    });
+
+    app.post("/tuitions", async (req, res) => {
+      const newTuition = req.body;
+      if (newTuition) {
+        newTuition.postedAt = new Date();
+      }
+      const result = await tuitionsCollection.insertOne(newTuition);
       res.send(result);
     });
 
