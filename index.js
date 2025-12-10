@@ -1,4 +1,4 @@
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
@@ -37,8 +37,39 @@ async function run() {
       const user = await usersCollection.findOne(query);
       res.send({ role: user?.role || "user" });
     });
+
+    app.get("/users/:email/profile", async (req, res) => {
+      const { email } = req.params;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+      res.send(user);
+    });
+    app.patch("/users/:email/profile", async (req, res) => {
+      const { email } = req.params;
+      const query = { email };
+      const profileData = req.body;
+
+      const updatedProfile = {
+        $set: {
+          photo: profileData.photo,
+          phone: profileData.phone,
+          "profile.gender": profileData.gender,
+          "profile.qualification": profileData.qualification,
+          "profile.experience": profileData.experience,
+          "profile.teachingSubject": profileData.teachingSubject,
+          "profile.expectedSalary": profileData.expectedSalary,
+          "profile.location": profileData.location,
+          "profile.profileStatus": "complete",
+        },
+      };
+
+      const result = await usersCollection.updateOne(query, updatedProfile);
+      res.send(result);
+    });
+
     app.post("/users", async (req, res) => {
       const newUser = req.body;
+
       const query = { email: newUser.email };
 
       const userExist = await usersCollection.findOne(query);
@@ -46,41 +77,66 @@ async function run() {
         return res.send({ message: "user already exists!" });
       }
 
+      newUser.profile = {
+        profileStatus: "incomplete",
+        approvalStatus: "pending",
+        joinDate: new Date(),
+      };
+
       const result = await usersCollection.insertOne(newUser);
       res.send(result);
     });
 
+    // tutors related api
+    app.get("/users/tutors", async (req, res) => {
+      const query = { role: "tutor" };
+      const cursor = usersCollection.find(query);
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+
+    app.get("/users/topTutors", async (req, res) => {
+      const query = { role: "tutor" };
+      const topTutors = await usersCollection
+        .find(query)
+        .sort({ joinDate: -1 })
+        .limit(6)
+        .toArray();
+      res.send(topTutors);
+    });
+
     // tuitions related api
     app.get("/tuitions", async (req, res) => {
+      const email = req.query.email;
+      const query = {};
+      if (email) {
+        query.postedBy = email;
+      }
+
       const result = await tuitionsCollection
-        .find({})
+        .find(query)
         .sort({ postedAt: -1 })
         .toArray();
+      res.send(result);
+    });
+
+    app.get("/tuitions/:id/details", async (req, res) => {
+      const { id } = req.params;
+      const query = {};
+      if (id) {
+        query._id = new ObjectId(id);
+      }
+      const result = await tuitionsCollection.findOne(query);
       res.send(result);
     });
 
     app.post("/tuitions", async (req, res) => {
       const newTuition = req.body;
       if (newTuition) {
-        newTuition.postedAt = new Date();
+        newTuition.postedDate = new Date();
       }
       const result = await tuitionsCollection.insertOne(newTuition);
       res.send(result);
-    });
-
-    // tutors related api
-    app.get("/tutors", async (req, res) => {
-      const cursor = tutorsCollection.find({});
-      const result = await cursor.toArray();
-      res.send(result);
-    });
-    app.get("/topTutors", async (req, res) => {
-      const topTutors = await tutorsCollection
-        .find()
-        .sort({ joinDate: -1 })
-        .limit(6)
-        .toArray();
-      res.send(topTutors);
     });
   } finally {
     // Ensures that the client will close when you finish/error
