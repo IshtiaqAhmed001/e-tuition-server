@@ -23,7 +23,6 @@ const client = new MongoClient(uri, {
 
 const eTuitionsDB = client.db("eTuitionsBD");
 const usersCollection = eTuitionsDB.collection("users");
-const tutorsCollection = eTuitionsDB.collection("tutors");
 const tuitionsCollection = eTuitionsDB.collection("tuitions");
 async function run() {
   try {
@@ -31,11 +30,32 @@ async function run() {
     await client.connect();
 
     // users related api
+
+    app.get("/users", async (req, res) => {
+      const users = await usersCollection.find({}).toArray();
+      res.send(users);
+    });
+
     app.get("/users/:email/role", async (req, res) => {
       const email = req.params.email;
       const query = { email };
       const user = await usersCollection.findOne(query);
       res.send({ role: user?.role || "user" });
+    });
+
+    app.patch("/users/:id/role", async (req, res) => {
+      const { id } = req.params;
+      const { role } = req.body;
+
+      const updatedRole = {
+        $set: { role }
+      };
+
+      const result = await usersCollection.updateOne(
+        { _id: new ObjectId(id) },
+        updatedRole
+      );
+      res.send(result);
     });
 
     app.get("/users/:email/profile", async (req, res) => {
@@ -59,7 +79,7 @@ async function run() {
           "profile.teachingSubject": profileData.teachingSubject,
           "profile.expectedSalary": profileData.expectedSalary,
           "profile.location": profileData.location,
-          "profile.profileStatus": "complete",
+          "profile.profileStatus": "complete"
         },
       };
 
@@ -104,6 +124,9 @@ async function run() {
         .toArray();
       res.send(topTutors);
     });
+
+    // admin related routes
+    // app.get('/users/tutors')
 
     // tuitions related api
     app.get("/tuitions", async (req, res) => {
