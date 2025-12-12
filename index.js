@@ -175,13 +175,33 @@ async function run() {
    res.send(result);
  });
 
+  app.patch("/admin/tuitions/:id/status", verifyFbToken, async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
+    const updatedStatus = {
+      $set: { status },
+    };
+    const result = await tuitionsCollection.updateOne(
+      { _id: new ObjectId(id) },
+      updatedStatus
+    );
+    res.send(result);
+  });
 
-    // tuitions related api
+    // tuitions related api.
+   
     app.get("/tuitions", async (req, res) => {
       const email = req.query.email;
-      const query = {};
-      if (email) {
+      const isAdmin = req.query.admin === "true";
+
+      let query = {};
+
+      if (isAdmin) {
+        query = {};
+      } else if (email) {
         query.postedBy = email;
+      } else {
+        query.status = "Approved";
       }
 
       const result = await tuitionsCollection
