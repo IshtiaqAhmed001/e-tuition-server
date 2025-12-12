@@ -2,6 +2,13 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const admin = require("firebase-admin");
+
+const serviceAccount = require("./e-tuition-bd-firebase-adminsdk.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -9,6 +16,24 @@ const port = process.env.PORT || 5000;
 // middleware
 app.use(cors());
 app.use(express.json());
+
+const verifyFbToken = async (req, res, next) => {
+  const token = req.headers.authorization;
+
+  if (!token) {
+    return res.status(401).send({ message: "Unauthorized access!" });
+  }
+
+  try {
+    const idToken = token.split(" ")[1];
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    req.decodedEmail = decoded.email;
+
+    next();
+  } catch (error) {
+    return res.status(401).send({ message: "Unauthorized access!" });
+  }
+};
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.nycnjuh.mongodb.net/?appName=Cluster0`;
 
@@ -31,24 +56,24 @@ async function run() {
 
     // users related api
 
-    app.get("/users", async (req, res) => {
+    app.get("/users",verifyFbToken, async (req, res) => {
       const users = await usersCollection.find({}).toArray();
       res.send(users);
     });
 
-    app.get("/users/:email/role", async (req, res) => {
+    app.get("/users/:email/role",verifyFbToken, async (req, res) => {
       const email = req.params.email;
       const query = { email };
       const user = await usersCollection.findOne(query);
       res.send({ role: user?.role || "user" });
     });
 
-    app.patch("/users/:id/role", async (req, res) => {
+    app.patch("/users/:id/role",verifyFbToken, async (req, res) => {
       const { id } = req.params;
       const { role } = req.body;
 
       const updatedRole = {
-        $set: { role }
+        $set: { role },
       };
 
       const result = await usersCollection.updateOne(
@@ -58,13 +83,21 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/users/:email/profile", async (req, res) => {
+    app.get("/users/:email/profile",verifyFbToken, async (req, res) => {
       const { email } = req.params;
+
       const query = { email };
+      if (email) {
+
+        if (email !== req.decodedEmail) {
+          return res.status(403).send({ message: "Forbidden access!" });
+        }
+      }
+
       const user = await usersCollection.findOne(query);
       res.send(user);
     });
-    app.patch("/users/:email/profile", async (req, res) => {
+    app.patch("/users/:email/profile",verifyFbToken, async (req, res) => {
       const { email } = req.params;
       const query = { email };
       const profileData = req.body;
@@ -79,7 +112,7 @@ async function run() {
           "profile.teachingSubject": profileData.teachingSubject,
           "profile.expectedSalary": profileData.expectedSalary,
           "profile.location": profileData.location,
-          "profile.profileStatus": "complete"
+          "profile.profileStatus": "complete",
         },
       };
 
@@ -87,7 +120,7 @@ async function run() {
       res.send(result);
     });
 
-    app.post("/users", async (req, res) => {
+    app.post("/users",verifyFbToken, async (req, res) => {
       const newUser = req.body;
 
       const query = { email: newUser.email };
@@ -108,7 +141,7 @@ async function run() {
     });
 
     // tutors related api
-    app.get("/users/tutors", async (req, res) => {
+    app.get("/users/tutors",verifyFbToken, async (req, res) => {
       const query = { role: "tutor" };
       const cursor = usersCollection.find(query);
       const result = await cursor.toArray();
@@ -143,7 +176,7 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/tuitions/:id/details", async (req, res) => {
+    app.get("/tuitions/:id/details", verifyFbToken,async (req, res) => {
       const { id } = req.params;
       const query = {};
       if (id) {
@@ -153,7 +186,7 @@ async function run() {
       res.send(result);
     });
 
-    app.post("/tuitions", async (req, res) => {
+    app.post("/tuitions",verifyFbToken, async (req, res) => {
       const newTuition = req.body;
       if (newTuition) {
         newTuition.postedDate = new Date();
