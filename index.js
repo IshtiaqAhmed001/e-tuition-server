@@ -68,21 +68,7 @@ async function run() {
       res.send({ role: user?.role || "user" });
     });
 
-    app.patch("/users/:id/role",verifyFbToken, async (req, res) => {
-      const { id } = req.params;
-      const { role } = req.body;
-
-      const updatedRole = {
-        $set: { role },
-      };
-
-      const result = await usersCollection.updateOne(
-        { _id: new ObjectId(id) },
-        updatedRole
-      );
-      res.send(result);
-    });
-
+    
     app.get("/users/:email/profile",verifyFbToken, async (req, res) => {
       const { email } = req.params;
 
@@ -159,7 +145,36 @@ async function run() {
     });
 
     // admin related routes
-    // app.get('/users/tutors')
+ app.patch("/admin/users/:id/role", verifyFbToken, async (req, res) => {
+   const { id } = req.params;
+   const { role } = req.body;
+
+   const updatedRole = {
+     $set: { role },
+   };
+
+   const result = await usersCollection.updateOne(
+     { _id: new ObjectId(id) },
+     updatedRole
+   );
+   res.send(result);
+ });
+ app.patch("/admin/users/:id/status", verifyFbToken, async (req, res) => {
+   const { id } = req.params;
+   const { approvalStatus } = req.body;
+
+   const updatedStatus = {
+     $set: { "profile.approvalStatus": approvalStatus },
+   };
+
+   const result = await usersCollection.updateOne(
+     { _id: new ObjectId(id) },
+     updatedStatus
+   );
+
+   res.send(result);
+ });
+
 
     // tuitions related api
     app.get("/tuitions", async (req, res) => {
