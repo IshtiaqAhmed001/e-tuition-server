@@ -49,6 +49,8 @@ const client = new MongoClient(uri, {
 const eTuitionsDB = client.db("eTuitionsBD");
 const usersCollection = eTuitionsDB.collection("users");
 const tuitionsCollection = eTuitionsDB.collection("tuitions");
+const applicationsCollection = eTuitionsDB.collection("applications");
+
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
@@ -144,7 +146,7 @@ async function run() {
 
     // tuitions related api.
 
-    // all tuitions for public 
+    // all tuitions for public
     app.get("/tuitions", async (req, res) => {
       const query = { status: "Approved" };
 
@@ -171,7 +173,7 @@ async function run() {
 
       res.send(result);
     });
-   
+
     app.get("/tuitions/:id/details", verifyFbToken, async (req, res) => {
       const { id } = req.params;
       const query = {};
@@ -184,8 +186,8 @@ async function run() {
 
     app.post("/tuitions", verifyFbToken, async (req, res) => {
       const newTuition = req.body;
-      const  decodedEmail  = req.decodedEmail;
-    
+      const decodedEmail = req.decodedEmail;
+
       const student = await usersCollection.findOne({ email: decodedEmail });
       if (!student) {
         return res.status(404).send({ message: "user not found!" });
@@ -198,6 +200,33 @@ async function run() {
       const result = await tuitionsCollection.insertOne(insertTuition);
       res.send(result);
     });
+
+    // applications related apis
+   app.post("/applications", verifyFbToken, async (req, res) => {
+     const newApplication = req.body;
+     const tutorEmail = req.decodedEmail;
+     const tuitionId = new ObjectId(newApplication.tuitionId);
+
+     const tutor = await usersCollection.findOne({ email: tutorEmail });
+     const tuition = await tuitionsCollection.findOne({ _id: tuitionId });
+
+     if (!tutor || tutor.role !== "tutor") {
+       return res.status(403).send({ message: "Only tutors can apply" });
+     }
+
+     if (!tuition || tuition.status !== "approved") {
+       return res.status(400).send({ message: "Tuition not available" });
+     }
+
+     newApplication.tutorId = tutor._id;
+     newApplication.studentId = tuition.studentId;
+     newApplication.status = "pending";
+     newApplication.tuitionId = tuition._id;
+     newApplication.createdAt = new Date();
+
+     const result = await applicationsCollection.insertOne(newApplication);
+     res.send(result);
+   });
 
     // admin related routes
     app.patch("/admin/users/:id/role", verifyFbToken, async (req, res) => {
@@ -230,18 +259,18 @@ async function run() {
       res.send(result);
     });
 
-  app.get("/admin/tuitions", verifyFbToken, async (req, res) => {
-    const email = req.decodedEmail;
+    app.get("/admin/tuitions", verifyFbToken, async (req, res) => {
+      const email = req.decodedEmail;
 
-    const user = await usersCollection.findOne({ email });
+      const user = await usersCollection.findOne({ email });
 
-    if (user?.role !== "admin") {
-      return res.status(403).send({ message: "Forbidden" });
-    }
+      if (user?.role !== "admin") {
+        return res.status(403).send({ message: "Forbidden" });
+      }
 
-    const result = await tuitionsCollection.find({}).toArray();
-    res.send(result);
-  });
+      const result = await tuitionsCollection.find({}).toArray();
+      res.send(result);
+    });
 
     app.patch("/admin/tuitions/:id/status", verifyFbToken, async (req, res) => {
       const { id } = req.params;
