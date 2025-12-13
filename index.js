@@ -56,25 +56,23 @@ async function run() {
 
     // users related api
 
-    app.get("/users",verifyFbToken, async (req, res) => {
+    app.get("/users", verifyFbToken, async (req, res) => {
       const users = await usersCollection.find({}).toArray();
       res.send(users);
     });
 
-    app.get("/users/:email/role",verifyFbToken, async (req, res) => {
+    app.get("/users/:email/role", verifyFbToken, async (req, res) => {
       const email = req.params.email;
       const query = { email };
       const user = await usersCollection.findOne(query);
       res.send({ role: user?.role || "user" });
     });
 
-    
-    app.get("/users/:email/profile",verifyFbToken, async (req, res) => {
+    app.get("/users/:email/profile", verifyFbToken, async (req, res) => {
       const { email } = req.params;
 
       const query = { email };
       if (email) {
-
         if (email !== req.decodedEmail) {
           return res.status(403).send({ message: "Forbidden access!" });
         }
@@ -83,7 +81,7 @@ async function run() {
       const user = await usersCollection.findOne(query);
       res.send(user);
     });
-    app.patch("/users/:email/profile",verifyFbToken, async (req, res) => {
+    app.patch("/users/:email/profile", verifyFbToken, async (req, res) => {
       const { email } = req.params;
       const query = { email };
       const profileData = req.body;
@@ -106,7 +104,7 @@ async function run() {
       res.send(result);
     });
 
-    app.post("/users",verifyFbToken, async (req, res) => {
+    app.post("/users", verifyFbToken, async (req, res) => {
       const newUser = req.body;
 
       const query = { email: newUser.email };
@@ -127,7 +125,7 @@ async function run() {
     });
 
     // tutors related api
-    app.get("/users/tutors",verifyFbToken, async (req, res) => {
+    app.get("/users/tutors", verifyFbToken, async (req, res) => {
       const query = { role: "tutor" };
       const cursor = usersCollection.find(query);
       const result = await cursor.toArray();
@@ -144,74 +142,37 @@ async function run() {
       res.send(topTutors);
     });
 
-    // admin related routes
- app.patch("/admin/users/:id/role", verifyFbToken, async (req, res) => {
-   const { id } = req.params;
-   const { role } = req.body;
-
-   const updatedRole = {
-     $set: { role },
-   };
-
-   const result = await usersCollection.updateOne(
-     { _id: new ObjectId(id) },
-     updatedRole
-   );
-   res.send(result);
- });
- app.patch("/admin/users/:id/status", verifyFbToken, async (req, res) => {
-   const { id } = req.params;
-   const { approvalStatus } = req.body;
-
-   const updatedStatus = {
-     $set: { "profile.approvalStatus": approvalStatus },
-   };
-
-   const result = await usersCollection.updateOne(
-     { _id: new ObjectId(id) },
-     updatedStatus
-   );
-
-   res.send(result);
- });
-
-  app.patch("/admin/tuitions/:id/status", verifyFbToken, async (req, res) => {
-    const { id } = req.params;
-    const { status } = req.body;
-    const updatedStatus = {
-      $set: { status },
-    };
-    const result = await tuitionsCollection.updateOne(
-      { _id: new ObjectId(id) },
-      updatedStatus
-    );
-    res.send(result);
-  });
-
     // tuitions related api.
-   
+
+    // all tuitions for public 
     app.get("/tuitions", async (req, res) => {
-      const email = req.query.email;
-      const isAdmin = req.query.admin === "true";
-
-      let query = {};
-
-      if (isAdmin) {
-        query = {};
-      } else if (email) {
-        query.postedBy = email;
-      } else {
-        query.status = "Approved";
-      }
+      const query = { status: "Approved" };
 
       const result = await tuitionsCollection
         .find(query)
-        .sort({ postedAt: -1 })
+        .sort({ postedDate: -1 })
         .toArray();
+
       res.send(result);
     });
 
-    app.get("/tuitions/:id/details", verifyFbToken,async (req, res) => {
+    app.get("/my-tuitions", verifyFbToken, async (req, res) => {
+      const email = req.decodedEmail;
+
+      const student = await usersCollection.findOne({ email });
+      if (!student) {
+        return res.status(404).send({ message: "User not found" });
+      }
+
+      const result = await tuitionsCollection
+        .find({ studentId: student._id })
+        .sort({ postedDate: -1 })
+        .toArray();
+
+      res.send(result);
+    });
+   
+    app.get("/tuitions/:id/details", verifyFbToken, async (req, res) => {
       const { id } = req.params;
       const query = {};
       if (id) {
@@ -221,12 +182,77 @@ async function run() {
       res.send(result);
     });
 
-    app.post("/tuitions",verifyFbToken, async (req, res) => {
+    app.post("/tuitions", verifyFbToken, async (req, res) => {
       const newTuition = req.body;
-      if (newTuition) {
-        newTuition.postedDate = new Date();
+      const  decodedEmail  = req.decodedEmail;
+    
+      const student = await usersCollection.findOne({ email: decodedEmail });
+      if (!student) {
+        return res.status(404).send({ message: "user not found!" });
       }
-      const result = await tuitionsCollection.insertOne(newTuition);
+      const insertTuition = {
+        ...newTuition,
+        studentId: student._id,
+        postedDate: new Date(),
+      };
+      const result = await tuitionsCollection.insertOne(insertTuition);
+      res.send(result);
+    });
+
+    // admin related routes
+    app.patch("/admin/users/:id/role", verifyFbToken, async (req, res) => {
+      const { id } = req.params;
+      const { role } = req.body;
+
+      const updatedRole = {
+        $set: { role },
+      };
+
+      const result = await usersCollection.updateOne(
+        { _id: new ObjectId(id) },
+        updatedRole
+      );
+      res.send(result);
+    });
+    app.patch("/admin/users/:id/status", verifyFbToken, async (req, res) => {
+      const { id } = req.params;
+      const { approvalStatus } = req.body;
+
+      const updatedStatus = {
+        $set: { "profile.approvalStatus": approvalStatus },
+      };
+
+      const result = await usersCollection.updateOne(
+        { _id: new ObjectId(id) },
+        updatedStatus
+      );
+
+      res.send(result);
+    });
+
+  app.get("/admin/tuitions", verifyFbToken, async (req, res) => {
+    const email = req.decodedEmail;
+
+    const user = await usersCollection.findOne({ email });
+
+    if (user?.role !== "admin") {
+      return res.status(403).send({ message: "Forbidden" });
+    }
+
+    const result = await tuitionsCollection.find({}).toArray();
+    res.send(result);
+  });
+
+    app.patch("/admin/tuitions/:id/status", verifyFbToken, async (req, res) => {
+      const { id } = req.params;
+      const { status } = req.body;
+      const updatedStatus = {
+        $set: { status },
+      };
+      const result = await tuitionsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        updatedStatus
+      );
       res.send(result);
     });
   } finally {
