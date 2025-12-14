@@ -202,6 +202,23 @@ async function run() {
     });
 
     // applications related apis
+
+    app.get('/applications',verifyFbToken,async(req,res)=>{
+      const userEmail = req.decodedEmail;
+      const user = await usersCollection.findOne({email:userEmail});
+      const userId = user._id;
+      const query ={};
+      if(user.role==='tutor'){
+query.tutorId = userId
+      }
+      if(user.role ==='student'){
+        query.studentId=userId;
+      }
+      
+      const applications = await applicationsCollection.find(query).toArray();
+      res.send(applications)
+    })
+
    app.post("/applications", verifyFbToken, async (req, res) => {
      const newApplication = req.body;
      const tutorEmail = req.decodedEmail;
@@ -214,17 +231,21 @@ async function run() {
        return res.status(403).send({ message: "Only tutors can apply" });
      }
 
-     if (!tuition || tuition.status !== "approved") {
+     if (!tuition || tuition.status.toLowerCase() !== "approved") {
        return res.status(400).send({ message: "Tuition not available" });
      }
 
      newApplication.tutorId = tutor._id;
+     newApplication.tutorName = tutor.name;
      newApplication.studentId = tuition.studentId;
      newApplication.status = "pending";
      newApplication.tuitionId = tuition._id;
+     newApplication.tuitionTitle = tuition.title;
      newApplication.createdAt = new Date();
 
      const result = await applicationsCollection.insertOne(newApplication);
+
+     console.log('hellot from app: ',result)
      res.send(result);
    });
 
