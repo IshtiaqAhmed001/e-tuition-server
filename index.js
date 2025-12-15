@@ -3,6 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const admin = require("firebase-admin");
+const stripe = require("stripe")(process.env.STRIPE_SECRET);
 
 const serviceAccount = require("./e-tuition-bd-firebase-adminsdk.json");
 
@@ -203,51 +204,74 @@ async function run() {
 
     // applications related apis
 
-    app.get('/applications',verifyFbToken,async(req,res)=>{
+    app.get("/applications", verifyFbToken, async (req, res) => {
       const userEmail = req.decodedEmail;
-      const user = await usersCollection.findOne({email:userEmail});
+      const user = await usersCollection.findOne({ email: userEmail });
       const userId = user._id;
-      const query ={};
-      if(user.role==='tutor'){
-query.tutorId = userId
+      const query = {};
+      if (user.role === "tutor") {
+        query.tutorId = userId;
       }
-      if(user.role ==='student'){
-        query.studentId=userId;
+      if (user.role === "student") {
+        query.studentId = userId;
       }
-      
+
       const applications = await applicationsCollection.find(query).toArray();
-      res.send(applications)
-    })
+      res.send(applications);
+    });
 
-   app.post("/applications", verifyFbToken, async (req, res) => {
-     const newApplication = req.body;
-     const tutorEmail = req.decodedEmail;
-     const tuitionId = new ObjectId(newApplication.tuitionId);
+    app.post("/applications", verifyFbToken, async (req, res) => {
+      const newApplication = req.body;
+      const tutorEmail = req.decodedEmail;
+      const tuitionId = new ObjectId(newApplication.tuitionId);
 
-     const tutor = await usersCollection.findOne({ email: tutorEmail });
-     const tuition = await tuitionsCollection.findOne({ _id: tuitionId });
+      const tutor = await usersCollection.findOne({ email: tutorEmail });
+      const tuition = await tuitionsCollection.findOne({ _id: tuitionId });
 
-     if (!tutor || tutor.role !== "tutor") {
-       return res.status(403).send({ message: "Only tutors can apply" });
-     }
+      if (!tutor || tutor.role !== "tutor") {
+        return res.status(403).send({ message: "Only tutors can apply" });
+      }
 
-     if (!tuition || tuition.status.toLowerCase() !== "approved") {
-       return res.status(400).send({ message: "Tuition not available" });
-     }
+      if (!tuition || tuition.status.toLowerCase() !== "approved") {
+        return res.status(400).send({ message: "Tuition not available" });
+      }
 
-     newApplication.tutorId = tutor._id;
-     newApplication.tutorName = tutor.name;
-     newApplication.studentId = tuition.studentId;
-     newApplication.status = "pending";
-     newApplication.tuitionId = tuition._id;
-     newApplication.tuitionTitle = tuition.title;
-     newApplication.createdAt = new Date();
+      newApplication.tutorId = tutor._id;
+      newApplication.tutorName = tutor.name;
+      newApplication.studentId = tuition.studentId;
+      newApplication.status = "pending";
+      newApplication.tuitionId = tuition._id;
+      newApplication.tuitionTitle = tuition.title;
+      newApplication.createdAt = new Date();
 
-     const result = await applicationsCollection.insertOne(newApplication);
+      const result = await applicationsCollection.insertOne(newApplication);
 
-     console.log('hellot from app: ',result)
-     res.send(result);
-   });
+      console.log("hellot from app: ", result);
+      res.send(result);
+    });
+
+    app.get("/applications/:id", verifyFbToken, async (req, res) => {
+      const { id } = req.params;
+      const query = { _id: new ObjectId(id) };
+      const application = await applicationsCollection.findOne(query);
+      res.send(application);
+    });
+    app.patch("/applications/:id", verifyFbToken, async (req, res) => {
+      const { id } = req.params;
+      const { status: newStatus } = req.body;
+      const query = {
+        _id: new ObjectId(id),
+      };
+      const updatedApplication = {
+        $set: { paymentStatus: newStatus },
+      };
+
+      const result = await applicationsCollection.updateOne(
+        query,
+        updatedApplication
+      );
+      res.send(result);
+    });
 
     // admin related routes
     app.patch("/admin/users/:id/role", verifyFbToken, async (req, res) => {
@@ -304,6 +328,57 @@ query.tutorId = userId
         updatedStatus
       );
       res.send(result);
+    });
+
+    // payment related apis
+    app.post("/payment-checkout-session", async (req, res) => {
+      const paymentInfo = req.body;
+      const amount = parseInt(paymentInfo.cost) * 100;
+      const session = await stripe.checkout.sessions.create({
+        line_items: [
+          {
+            price_data: {
+              currency: "BDT",
+              unit_amount: amount,
+              product_data: {
+                name: `Please pay for: ${paymentInfo.tuitionTitle}`,
+              },
+            },
+            quantity: 1,
+          },
+        ],
+        mode: "payment",
+        metadata: {
+          tuitionId: paymentInfo.tuitionId,
+          applicationId: paymentInfo.applicationId,
+          studentId: paymentInfo.studentId,
+          tutorId: paymentInfo.tutorId,
+          email: paymentInfo.email,
+        },
+        customer_email: paymentInfo.email,
+        success_url: `${process.env.SITE_DOMAIN}/dashboard/student/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${process.env.SITE_DOMAIN}/dashboard/student/payment-cancelled`,
+      });
+      res.send({ url: session.url });
+    });
+
+    app.patch("/payment-success", verifyFbToken, async (req, res) => {
+      const sessionId = req.query.session_id;
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      console.log("session: ", session);
+      if (session.payment_status === "paid") {
+        const id = session.metadata.applicationId;
+        const query = { _id: new ObjectId(id) };
+        const update = {
+          $set: {
+            paymentStatus: "paid",
+          },
+        };
+        const result = await applicationsCollection.updateOne(query, update);
+        res.send(result);
+      }
+
+      res.send({ success: false });
     });
   } finally {
     // Ensures that the client will close when you finish/error
