@@ -14,6 +14,14 @@ admin.initializeApp({
 const app = express();
 const port = process.env.PORT || 5000;
 
+const generateTrackingId = () => {
+  const prefix = "ETB-APP";
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+
+  return `${prefix}-${date}-${random}`;
+};
+
 // middleware
 app.use(cors());
 app.use(express.json());
@@ -51,6 +59,7 @@ const eTuitionsDB = client.db("eTuitionsBD");
 const usersCollection = eTuitionsDB.collection("users");
 const tuitionsCollection = eTuitionsDB.collection("tuitions");
 const applicationsCollection = eTuitionsDB.collection("applications");
+const paymentsCollection = eTuitionsDB.collection("payments");
 
 async function run() {
   try {
@@ -240,13 +249,14 @@ async function run() {
       newApplication.tutorName = tutor.name;
       newApplication.studentId = tuition.studentId;
       newApplication.status = "pending";
+      newApplication.paymentStatus = "unpaid";
       newApplication.tuitionId = tuition._id;
       newApplication.tuitionTitle = tuition.title;
       newApplication.createdAt = new Date();
 
       const result = await applicationsCollection.insertOne(newApplication);
 
-      console.log("hellot from app: ", result);
+      console.log("hello from app: ", result);
       res.send(result);
     });
 
@@ -263,7 +273,7 @@ async function run() {
         _id: new ObjectId(id),
       };
       const updatedApplication = {
-        $set: { paymentStatus: newStatus },
+        $set: { status: newStatus },
       };
 
       const result = await applicationsCollection.updateOne(
@@ -354,6 +364,7 @@ async function run() {
           studentId: paymentInfo.studentId,
           tutorId: paymentInfo.tutorId,
           email: paymentInfo.email,
+          tuitionTitle: paymentInfo.tuitionTitle,
         },
         customer_email: paymentInfo.email,
         success_url: `${process.env.SITE_DOMAIN}/dashboard/student/payment-success?session_id={CHECKOUT_SESSION_ID}`,
@@ -365,21 +376,74 @@ async function run() {
     app.patch("/payment-success", verifyFbToken, async (req, res) => {
       const sessionId = req.query.session_id;
       const session = await stripe.checkout.sessions.retrieve(sessionId);
-      console.log("session: ", session);
+      
+      // console.log("session: ", session);
+      const transactionId= session.payment_intent;
+      const query = { transactionId: transactionId };
+
+      const paymentExist = await paymentsCollection.findOne(query);
+  
+
+      if(paymentExist){
+        return res.send({
+          message: 'Payment already exists',
+          transactionId,
+          trackingId: paymentExist.trackingId
+        })
+      }
+
+
+      const trackingId = generateTrackingId()
       if (session.payment_status === "paid") {
         const id = session.metadata.applicationId;
         const query = { _id: new ObjectId(id) };
         const update = {
           $set: {
             paymentStatus: "paid",
+            status: "accepted",
+            trackingId: trackingId,
           },
         };
         const result = await applicationsCollection.updateOne(query, update);
-        res.send(result);
+
+        const payment = {
+          amount: session.amount_total / 100,
+          currency: session.currency,
+          customer_email: session.customer_email,
+          applicationId: session.metadata.applicationId,
+          tuitionTitle: session.metadata.tuitionTitle,
+          transactionId: session.payment_intent,
+          paymentStatus: session.payment_status,
+          paidAt: new Date(),
+          trackingId:trackingId
+        };
+        if(session.payment_status==='paid'){
+          const resultPayment = await paymentsCollection.insertOne(payment);
+          res.send({
+            success: true,
+            modifyApplication: result,
+            trackingId: trackingId,
+            transactionId: session.payment_intent,
+            paymentInfo: resultPayment,
+          });
+        }
       }
 
       res.send({ success: false });
     });
+
+    app.get('/payments',async(req,res)=>{
+      const email =req.query.email;
+      const query ={}
+      if(email){
+      query.customer_email=email;
+      }
+
+      const cursor = paymentsCollection.find(query);
+      const result = await cursor.toArray();
+      res.send(result);
+    })
+
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
