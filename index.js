@@ -61,6 +61,19 @@ const tuitionsCollection = eTuitionsDB.collection("tuitions");
 const applicationsCollection = eTuitionsDB.collection("applications");
 const paymentsCollection = eTuitionsDB.collection("payments");
 
+// verify admin middleware
+const verifyAdmin = async(req,res,next)=>{
+  const email = req.decodedEmail;
+  const query ={email};
+  const user = await usersCollection.findOne(query);
+
+  if(!user || user.role !== 'admin'){
+    return res.status(403).send({message:'forbidden access'})
+  }
+
+  next();
+}
+
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
@@ -284,7 +297,7 @@ async function run() {
     });
 
     // admin related routes
-    app.patch("/admin/users/:id/role", verifyFbToken, async (req, res) => {
+    app.patch("/admin/users/:id/role", verifyFbToken,verifyAdmin, async (req, res) => {
       const { id } = req.params;
       const { role } = req.body;
 
@@ -298,7 +311,7 @@ async function run() {
       );
       res.send(result);
     });
-    app.patch("/admin/users/:id/status", verifyFbToken, async (req, res) => {
+    app.patch("/admin/users/:id/status", verifyFbToken,verifyAdmin, async (req, res) => {
       const { id } = req.params;
       const { approvalStatus } = req.body;
 
@@ -314,20 +327,13 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/admin/tuitions", verifyFbToken, async (req, res) => {
-      const email = req.decodedEmail;
-
-      const user = await usersCollection.findOne({ email });
-
-      if (user?.role !== "admin") {
-        return res.status(403).send({ message: "Forbidden" });
-      }
+    app.get("/admin/tuitions", verifyFbToken,verifyAdmin, async (req, res) => {
 
       const result = await tuitionsCollection.find({}).toArray();
       res.send(result);
     });
 
-    app.patch("/admin/tuitions/:id/status", verifyFbToken, async (req, res) => {
+    app.patch("/admin/tuitions/:id/status", verifyFbToken,verifyAdmin, async (req, res) => {
       const { id } = req.params;
       const { status } = req.body;
       const updatedStatus = {
@@ -432,7 +438,7 @@ async function run() {
       res.send({ success: false });
     });
 
-    app.get('/payments',async(req,res)=>{
+    app.get('/payments',verifyFbToken,async(req,res)=>{
       const email =req.query.email;
       const query ={}
       if(email){
