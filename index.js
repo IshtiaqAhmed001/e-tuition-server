@@ -279,7 +279,9 @@ async function run() {
       const application = await applicationsCollection.findOne(query);
       res.send(application);
     });
-    app.patch("/applications/:id", verifyFbToken, async (req, res) => {
+
+    // update application status from student profile 
+    app.patch("/applications/:id/update-status", verifyFbToken, async (req, res) => {
       const { id } = req.params;
       const { status: newStatus } = req.body;
       const query = {
@@ -294,6 +296,31 @@ async function run() {
         updatedApplication
       );
       res.send(result);
+    });
+    // edit application from tutor profile 
+    app.patch("/applications/:id/edit-application", verifyFbToken, async (req, res) => {
+      const { id } = req.params;
+      const data = req.body;
+      const query ={_id: new ObjectId(id)}
+      const updatedDoc ={
+        $set:{
+          qualification:data.qualification,
+          expectedSalary:data.expectedSalary,
+          experience:data.experience
+        }
+      }
+      const result = await applicationsCollection.updateOne(query,updatedDoc);
+
+      res.send(result)
+
+    });
+    app.delete("/applications/:id/delete", verifyFbToken, async (req, res) => {
+      const { id } = req.params;
+      const query ={_id: new ObjectId(id)}
+
+      const result = await applicationsCollection.deleteOne(query);
+      res.send(result)
+
     });
 
     // admin related routes
