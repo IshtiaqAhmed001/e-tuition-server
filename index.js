@@ -601,6 +601,74 @@ async function run() {
       const result = await cursor.toArray();
       res.send(result);
     });
+
+    app.get("/tutor/revenue", verifyFbToken, async (req, res) => {
+      try {
+        const tutorEmail = req.decodedEmail;
+
+       
+        const tutor = await usersCollection.findOne({
+          email: tutorEmail,
+          role: "tutor",
+        });
+
+        if (!tutor) {
+          return res.status(404).send({ message: "Tutor not found" });
+        }
+
+        const revenue = await paymentsCollection
+          .aggregate([
+    
+          {
+  $addFields: {
+    applicationObjId: { $toObjectId: "$applicationId" }
+  }
+},
+
+         
+            {
+              $lookup: {
+                from: "applications",
+                localField: "applicationObjId",
+                foreignField: "_id",
+                as: "application",
+              },
+            },
+
+          
+            { $unwind: "$application" },
+
+            {
+              $match: {
+                "application.tutorId": tutor._id,
+                paymentStatus: "paid",
+              },
+            },
+
+       
+            {
+              $project: {
+                _id: 1,
+                amount: 1,
+                currency: 1,
+                tuitionTitle: 1,
+                paidAt: 1,
+                transactionId: 1,
+                trackingId: "$application.trackingId",
+              },
+            },
+
+           
+            { $sort: { paidAt: -1 } },
+          ])
+          .toArray();
+
+        res.send(revenue);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: "Failed to load revenue" });
+      }
+    });
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
