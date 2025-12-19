@@ -62,17 +62,17 @@ const applicationsCollection = eTuitionsDB.collection("applications");
 const paymentsCollection = eTuitionsDB.collection("payments");
 
 // verify admin middleware
-const verifyAdmin = async(req,res,next)=>{
+const verifyAdmin = async (req, res, next) => {
   const email = req.decodedEmail;
-  const query ={email};
+  const query = { email };
   const user = await usersCollection.findOne(query);
 
-  if(!user || user.role !== 'admin'){
-    return res.status(403).send({message:'forbidden access'})
+  if (!user || user.role !== "admin") {
+    return res.status(403).send({ message: "forbidden access" });
   }
 
   next();
-}
+};
 
 async function run() {
   try {
@@ -207,6 +207,29 @@ async function run() {
       res.send(result);
     });
 
+    app.patch("/tuitions/:id/edit", verifyFbToken, async (req, res) => {
+      const { id } = req.params;
+      const query = { _id: new ObjectId(id) };
+      const data = req.body;
+
+      const updatedDoc = {
+        $set: {
+          title: data.title,
+          salary: data.salary,
+          daysPerWeek: data.daysPerWeek,
+        },
+      };
+
+      const result = await tuitionsCollection.updateOne(query, updatedDoc);
+      res.send(result);
+    });
+    app.delete("/tuitions/:id/delete", verifyFbToken, async (req, res) => {
+      const { id } = req.params;
+      const query = { _id: new ObjectId(id) };
+      const result = await tuitionsCollection.deleteOne(query);
+      res.send(result);
+    });
+
     app.post("/tuitions", verifyFbToken, async (req, res) => {
       const newTuition = req.body;
       const decodedEmail = req.decodedEmail;
@@ -280,98 +303,202 @@ async function run() {
       res.send(application);
     });
 
-    // update application status from student profile 
-    app.patch("/applications/:id/update-status", verifyFbToken, async (req, res) => {
-      const { id } = req.params;
-      const { status: newStatus } = req.body;
-      const query = {
-        _id: new ObjectId(id),
-      };
-      const updatedApplication = {
-        $set: { status: newStatus },
-      };
+    // update application status from student profile
+    app.patch(
+      "/applications/:id/update-status",
+      verifyFbToken,
+      async (req, res) => {
+        const { id } = req.params;
+        const { status: newStatus } = req.body;
+        const query = {
+          _id: new ObjectId(id),
+        };
+        const updatedApplication = {
+          $set: { status: newStatus },
+        };
 
-      const result = await applicationsCollection.updateOne(
-        query,
-        updatedApplication
-      );
-      res.send(result);
-    });
-    // edit application from tutor profile 
-    app.patch("/applications/:id/edit-application", verifyFbToken, async (req, res) => {
-      const { id } = req.params;
-      const data = req.body;
-      const query ={_id: new ObjectId(id)}
-      const updatedDoc ={
-        $set:{
-          qualification:data.qualification,
-          expectedSalary:data.expectedSalary,
-          experience:data.experience
-        }
+        const result = await applicationsCollection.updateOne(
+          query,
+          updatedApplication
+        );
+        res.send(result);
       }
-      const result = await applicationsCollection.updateOne(query,updatedDoc);
+    );
+    // edit application from tutor profile
+    app.patch(
+      "/applications/:id/edit-application",
+      verifyFbToken,
+      async (req, res) => {
+        const { id } = req.params;
+        const data = req.body;
+        const query = { _id: new ObjectId(id) };
+        const updatedDoc = {
+          $set: {
+            qualification: data.qualification,
+            expectedSalary: data.expectedSalary,
+            experience: data.experience,
+          },
+        };
+        const result = await applicationsCollection.updateOne(
+          query,
+          updatedDoc
+        );
 
-      res.send(result)
-
-    });
+        res.send(result);
+      }
+    );
     app.delete("/applications/:id/delete", verifyFbToken, async (req, res) => {
       const { id } = req.params;
-      const query ={_id: new ObjectId(id)}
+      const query = { _id: new ObjectId(id) };
 
       const result = await applicationsCollection.deleteOne(query);
-      res.send(result)
-
+      res.send(result);
     });
 
     // admin related routes
-    app.patch("/admin/users/:id/role", verifyFbToken,verifyAdmin, async (req, res) => {
-      const { id } = req.params;
-      const { role } = req.body;
+    app.get(
+      "/admin/users/:id",
+      verifyFbToken,
+      verifyAdmin,
+      async (req, res) => {
+        const { id } = req.params;
 
-      const updatedRole = {
-        $set: { role },
-      };
+        const user = await usersCollection.findOne({
+          _id: new ObjectId(id),
+        });
 
-      const result = await usersCollection.updateOne(
-        { _id: new ObjectId(id) },
-        updatedRole
-      );
-      res.send(result);
-    });
-    app.patch("/admin/users/:id/status", verifyFbToken,verifyAdmin, async (req, res) => {
-      const { id } = req.params;
-      const { approvalStatus } = req.body;
+        if (!user) {
+          return res.status(404).send({ message: "User not found" });
+        }
 
-      const updatedStatus = {
-        $set: { "profile.approvalStatus": approvalStatus },
-      };
+        res.send(user);
+      }
+    );
 
-      const result = await usersCollection.updateOne(
-        { _id: new ObjectId(id) },
-        updatedStatus
-      );
+    app.patch(
+      "/admin/users/:id/role",
+      verifyFbToken,
+      verifyAdmin,
+      async (req, res) => {
+        const { id } = req.params;
+        const { role } = req.body;
 
-      res.send(result);
-    });
+        const updatedRole = {
+          $set: { role },
+        };
 
-    app.get("/admin/tuitions", verifyFbToken,verifyAdmin, async (req, res) => {
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(id) },
+          updatedRole
+        );
+        res.send(result);
+      }
+    );
 
+    app.patch(
+      "/admin/users/:id/profile",
+      verifyFbToken,
+      verifyAdmin,
+      async (req, res) => {
+        const { id } = req.params;
+        const data = req.body;
+
+        const query = { _id: new ObjectId(id) };
+
+        const updatedDoc = {
+          $set: {
+            name: data.name,
+            phone: data.phone,
+            photo: data.photo,
+
+            "profile.gender": data.gender,
+            "profile.qualification": data.qualification,
+            "profile.experience": data.experience,
+            "profile.teachingSubject": data.teachingSubject,
+            "profile.expectedSalary": data.expectedSalary,
+            "profile.location": data.location,
+
+            "profile.profileStatus": "complete",
+            updatedAt: new Date(),
+          },
+        };
+
+        const result = await usersCollection.updateOne(query, updatedDoc);
+
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ message: "User not found" });
+        }
+
+        res.send({
+          success: true,
+          message: "User profile updated by admin",
+          result,
+        });
+      }
+    );
+
+    app.patch(
+      "/admin/users/:id/status",
+      verifyFbToken,
+      verifyAdmin,
+      async (req, res) => {
+        const { id } = req.params;
+        const { approvalStatus } = req.body;
+
+        const updatedStatus = {
+          $set: { "profile.approvalStatus": approvalStatus },
+        };
+
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(id) },
+          updatedStatus
+        );
+
+        res.send(result);
+      }
+    );
+
+    app.delete(
+      "/admin/users/:id",
+      verifyFbToken,
+      verifyAdmin,
+      async (req, res) => {
+        const { id } = req.params;
+
+        const result = await usersCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+
+        if (result.deletedCount === 0) {
+          return res.status(404).send({ message: "User not found" });
+        }
+
+        res.send(result);
+      }
+    );
+
+    app.get("/admin/tuitions", verifyFbToken, verifyAdmin, async (req, res) => {
       const result = await tuitionsCollection.find({}).toArray();
       res.send(result);
     });
 
-    app.patch("/admin/tuitions/:id/status", verifyFbToken,verifyAdmin, async (req, res) => {
-      const { id } = req.params;
-      const { status } = req.body;
-      const updatedStatus = {
-        $set: { status },
-      };
-      const result = await tuitionsCollection.updateOne(
-        { _id: new ObjectId(id) },
-        updatedStatus
-      );
-      res.send(result);
-    });
+    app.patch(
+      "/admin/tuitions/:id/status",
+      verifyFbToken,
+      verifyAdmin,
+      async (req, res) => {
+        const { id } = req.params;
+        const { status } = req.body;
+        const updatedStatus = {
+          $set: { status },
+        };
+        const result = await tuitionsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          updatedStatus
+        );
+        res.send(result);
+      }
+    );
 
     // payment related apis
     app.post("/payment-checkout-session", async (req, res) => {
@@ -409,24 +536,22 @@ async function run() {
     app.patch("/payment-success", verifyFbToken, async (req, res) => {
       const sessionId = req.query.session_id;
       const session = await stripe.checkout.sessions.retrieve(sessionId);
-      
+
       // console.log("session: ", session);
-      const transactionId= session.payment_intent;
+      const transactionId = session.payment_intent;
       const query = { transactionId: transactionId };
 
       const paymentExist = await paymentsCollection.findOne(query);
-  
 
-      if(paymentExist){
+      if (paymentExist) {
         return res.send({
-          message: 'Payment already exists',
+          message: "Payment already exists",
           transactionId,
-          trackingId: paymentExist.trackingId
-        })
+          trackingId: paymentExist.trackingId,
+        });
       }
 
-
-      const trackingId = generateTrackingId()
+      const trackingId = generateTrackingId();
       if (session.payment_status === "paid") {
         const id = session.metadata.applicationId;
         const query = { _id: new ObjectId(id) };
@@ -448,9 +573,9 @@ async function run() {
           transactionId: session.payment_intent,
           paymentStatus: session.payment_status,
           paidAt: new Date(),
-          trackingId:trackingId
+          trackingId: trackingId,
         };
-        if(session.payment_status==='paid'){
+        if (session.payment_status === "paid") {
           const resultPayment = await paymentsCollection.insertOne(payment);
           res.send({
             success: true,
@@ -465,18 +590,17 @@ async function run() {
       res.send({ success: false });
     });
 
-    app.get('/payments',verifyFbToken,async(req,res)=>{
-      const email =req.query.email;
-      const query ={}
-      if(email){
-      query.customer_email=email;
+    app.get("/payments", verifyFbToken, async (req, res) => {
+      const email = req.query.email;
+      const query = {};
+      if (email) {
+        query.customer_email = email;
       }
 
       const cursor = paymentsCollection.find(query);
       const result = await cursor.toArray();
       res.send(result);
-    })
-
+    });
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
