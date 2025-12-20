@@ -2,3 +2,4 @@
 node_modules
 e-tuition-bd-firebase-adminsdk.json
 *firebase-adminsdk*.json
+.vercel
