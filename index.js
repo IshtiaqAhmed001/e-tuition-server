@@ -82,6 +82,16 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
 
+    // public route for toptutors
+    app.get("/users/tutors/topTutors", async (req, res) => {
+      const query = { role: "tutor" };
+      const topTutors = await usersCollection
+        .find(query)
+        .sort({ joinDate: -1 })
+        .limit(6)
+        .toArray();
+      res.send(topTutors);
+    });
     // users related api
 
     app.get("/users", verifyFbToken, async (req, res) => {
@@ -93,7 +103,7 @@ async function run() {
       const email = req.params.email;
       const query = { email };
       const user = await usersCollection.findOne(query);
-      res.send({ role: user?.role || "user" });
+      res.send({ role: user?.role || "student" });
     });
 
     app.get("/users/:email/profile", verifyFbToken, async (req, res) => {
@@ -158,16 +168,6 @@ async function run() {
       const cursor = usersCollection.find(query);
       const result = await cursor.toArray();
       res.send(result);
-    });
-
-    app.get("/users/topTutors", async (req, res) => {
-      const query = { role: "tutor" };
-      const topTutors = await usersCollection
-        .find(query)
-        .sort({ joinDate: -1 })
-        .limit(6)
-        .toArray();
-      res.send(topTutors);
     });
 
     // tuitions related api.
@@ -609,7 +609,6 @@ async function run() {
       try {
         const tutorEmail = req.decodedEmail;
 
-       
         const tutor = await usersCollection.findOne({
           email: tutorEmail,
           role: "tutor",
@@ -621,14 +620,12 @@ async function run() {
 
         const revenue = await paymentsCollection
           .aggregate([
-    
-          {
-  $addFields: {
-    applicationObjId: { $toObjectId: "$applicationId" }
-  }
-},
+            {
+              $addFields: {
+                applicationObjId: { $toObjectId: "$applicationId" },
+              },
+            },
 
-         
             {
               $lookup: {
                 from: "applications",
@@ -638,7 +635,6 @@ async function run() {
               },
             },
 
-          
             { $unwind: "$application" },
 
             {
@@ -648,7 +644,6 @@ async function run() {
               },
             },
 
-       
             {
               $project: {
                 _id: 1,
@@ -661,7 +656,6 @@ async function run() {
               },
             },
 
-           
             { $sort: { paidAt: -1 } },
           ])
           .toArray();
@@ -679,10 +673,12 @@ async function run() {
 }
 run().catch(console.dir);
 
-app.get("/", async (req, res) => {
+app.get("/", (req, res) => {
   res.send("hello from eTuitionsBD server");
 });
 
-app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`);
-});
+module.exports = app;
+
+// app.listen(port, () => {
+//   console.log(`Example app listening on port ${port}`);
+// });
