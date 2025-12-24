@@ -80,7 +80,7 @@ const verifyAdmin = async (req, res, next) => {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
 
     // public route for toptutors
     app.get("/users/tutors/topTutors", async (req, res) => {
@@ -679,6 +679,6 @@ app.get("/", (req, res) => {
 
 module.exports = app;
 
-// app.listen(port, () => {
-//   console.log(`Example app listening on port ${port}`);
-// });
+app.listen(port, () => {
+  console.log(`Example app listening on port ${port}`);
+});
